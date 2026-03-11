@@ -14,4 +14,5 @@ wind_speed = st.number_input("Wind Speed")
 if st.button("Predict"):
     data = np.array([[temperature, humidity, wind_speed]])
     prediction = model.predict(data)
+
     st.write("Prediction:", prediction)
