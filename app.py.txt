@@ -1,0 +1,17 @@
+import streamlit as st
+import numpy as np
+from tensorflow.keras.models import load_model
+
+# load your model
+model = load_model("mima_model.keras")
+
+st.title("MiMa Weather Prediction")
+
+temperature = st.number_input("Temperature")
+humidity = st.number_input("Humidity")
+wind_speed = st.number_input("Wind Speed")
+
+if st.button("Predict"):
+    data = np.array([[temperature, humidity, wind_speed]])
+    prediction = model.predict(data)
+    st.write("Prediction:", prediction)
