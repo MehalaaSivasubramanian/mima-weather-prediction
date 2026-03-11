@@ -1,5 +1,5 @@
 import streamlit as st
-import tensorflow as tf
+import keras
 import numpy as np
 import pandas as pd
 import joblib
@@ -28,9 +28,9 @@ time = st.time_input("Select Time")
 @st.cache_resource
 def load_models():
 
-    micro_model = tf.keras.models.load_model("micro_model.keras")
-    macro_model = tf.keras.models.load_model("macro_model_updated.keras")
-    mima_model  = tf.keras.models.load_model("mima_model.keras")
+    micro_model = keras.models.load_model("micro_model.keras")
+    macro_model = keras.models.load_model("macro_model_updated.keras")
+    mima_model  = keras.models.load_model("mima_model.keras")
 
     return micro_model, macro_model, mima_model
 
@@ -51,7 +51,6 @@ def load_data():
         "https://drive.google.com/uc?id=1YyNi7cFLHm2VIei234lpIqC0y64jWdVt"
     )
 
-    # create datetime columns
     micro_df["Datetime"] = pd.to_datetime(
         micro_df[["Year","Month","Day","Hour","Minute"]]
     )
@@ -115,7 +114,6 @@ if st.button("Predict Weather"):
 
     macro_seq = macro_df_sorted.iloc[idx2-12:idx2].copy()
 
-    # recreate city one-hot encoding
     macro_seq["City_Chennai"] = (macro_seq["City"]=="Chennai").astype(int)
     macro_seq["City_Coimbatore"] = (macro_seq["City"]=="Coimbatore").astype(int)
     macro_seq["City_Kumbakonam"] = (macro_seq["City"]=="Kumbakonam").astype(int)
