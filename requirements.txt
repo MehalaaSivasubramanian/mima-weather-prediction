@@ -1,6 +1,7 @@
-streamlit==1.32.2
-tensorflow==2.15.0
+streamlit
+keras
 pandas
 numpy
 scikit-learn
 joblib
+h5py
