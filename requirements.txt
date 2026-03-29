@@ -1,7 +1,8 @@
-streamlit
-keras
-pandas
-numpy
-scikit-learn
-joblib
-h5py
+Flask==3.0.3
+gunicorn==22.0.0
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.5.1
+joblib==1.4.2
+tensorflow==2.16.1
+keras==3.4.0
