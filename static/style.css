@@ -83,6 +83,18 @@ input:focus, select:focus {
     box-shadow: 0 12px 25px rgba(102,126,234,0.4);
 }
 
+.warning-box {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-align: center;
+}
+
 .forecast-section {
     margin-top: 20px;
 }
@@ -189,4 +201,10 @@ input:focus, select:focus {
     .temp { color: #fc8181 !important; }
     .hum { color: #63b3ed !important; }
     .wind { color: #48bb78 !important; }
+
+    .warning-box {
+        background: #5c3d00;
+        color: #ffd166;
+        border: 1px solid #8b5e00;
+    }
 }
