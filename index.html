@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🌤️ MiMa Weather</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🌤️ MiMa Weather Prediction System</h1>
+
+        <form method="POST" action="/predict" class="weather-form">
+            <div class="form-group">
+                <label>🌆 City</label>
+                <select name="city">
+                    <option value="Chennai">Chennai</option>
+                    <option value="Madurai">Madurai</option>
+                    <option value="Kumbakonam">Kumbakonam</option>
+                    <option value="Trichy">Trichy</option>
+                    <option value="Coimbatore">Coimbatore</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>📅 Date</label>
+                <input type="date" name="date" required>
+            </div>
+            
+            <div class="form-group">
+                <label>🕐 Time</label>
+                <input type="time" name="time" required>
+            </div>
+            
+            <button type="submit" class="predict-btn">🔮 Predict Weather</button>
+        </form>
+
+        {% if forecast %}
+        <section class="forecast-section">
+            <h2 class="forecast-title">5-Hour Forecast</h2>
+            <div class="forecast-grid">
+                {% for f in forecast %}
+                <div class="weather-card">
+                    <div class="time">{{ f.time }}</div>
+                    <div class="metric temp">
+                        <span class="label">Temperature</span>
+                        <span class="value">{{ f.temp }}</span><span class="unit">°C</span>
+                    </div>
+                    <div class="metric hum">
+                        <span class="label">Humidity</span>
+                        <span class="value">{{ f.hum }}</span><span class="unit">%</span>
+                    </div>
+                    <div class="metric wind">
+                        <span class="label">Wind Speed</span>
+                        <span class="value">{{ f.wind }}</span><span class="unit">km/h</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+    </div>
+</body>
+</html>
