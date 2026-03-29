@@ -1,18 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>🌤️ MiMa Weather</title>
+    <title>🌤️ Re-MiMa Weather</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
-        <h1>🌤️ MiMa Weather Prediction System</h1>
+        <h1>🌤️ Re-MiMa Weather</h1>
 
         <form method="POST" action="/predict" class="weather-form">
             <div class="form-group">
-                <label>🌆 City</label>
+                <label>🌆 Select City</label>
                 <select name="city">
                     <option value="Chennai">Chennai</option>
                     <option value="Madurai">Madurai</option>
@@ -24,7 +24,7 @@
             
             <div class="form-group">
                 <label>📅 Date</label>
-                <input type="date" name="date" required>
+                <input type="date" name="date" min="2021-01-01" max="2024-12-31" required>
             </div>
             
             <div class="form-group">
@@ -32,7 +32,13 @@
                 <input type="time" name="time" required>
             </div>
             
-            <button type="submit" class="predict-btn">🔮 Predict Weather</button>
+            <button type="submit" class="predict-btn">🔮 Predict</button>
+
+            {% if warning %}
+            <div class="warning-box">
+                {{ warning }}
+            </div>
+            {% endif %}
         </form>
 
         {% if forecast %}
