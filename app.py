@@ -20,7 +20,7 @@ def download_micro_csv():
 
     print("📥 Downloading micro.csv from Google Drive...")
 
-    FILE_ID = "17eeKYcev5Bvw3QooTTLkP-i69hdkqZTo"   # <-- your Google Drive file ID
+    FILE_ID = "17eeKYcev5Bvw3QooTTLkP-i69hdkqZTo"
     URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
 
     try:
@@ -170,6 +170,19 @@ def predict():
 
         print(f"\n🔍 PREDICTING {city} at {input_datetime}")
 
+        # =========================
+        # DATE RANGE VALIDATION
+        # =========================
+        min_date = pd.Timestamp("2021-01-01 00:00")
+        max_date = pd.Timestamp("2024-12-31 23:59")
+
+        if input_datetime < min_date or input_datetime > max_date:
+            print("⚠️ Unsupported date selected")
+            return render_template(
+                "index.html",
+                warning="⚠️ Only 2021–2024 supported"
+            )
+
         micro_df, macro_df = load_data()
 
         # =========================
@@ -270,20 +283,10 @@ def predict():
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
-        pred_real = fallback_weather("Coimbatore")
-        forecast = []
-
-        for i in range(5):
-            future_time = pd.Timestamp.now() + timedelta(hours=i + 1)
-            temp, hum, wind = fix_values(pred_real[i][0], pred_real[i][1], pred_real[i][2], "Coimbatore")
-            forecast.append({
-                "time": future_time.strftime("%Y-%m-%d %H:%M"),
-                "temp": temp,
-                "hum": hum,
-                "wind": wind
-            })
-
-        return render_template("index.html", forecast=forecast)
+        return render_template(
+            "index.html",
+            warning="⚠️ Something went wrong. Please try again."
+        )
 
 
 if __name__ == "__main__":
