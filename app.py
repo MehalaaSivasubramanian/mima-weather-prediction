@@ -168,12 +168,12 @@ def predict():
         time = request.form["time"]
 
         # =========================
-        # INPUT CHECK
+        # EMPTY INPUT CHECK
         # =========================
         if not date or not time:
             return render_template(
                 "index.html",
-                warning="⚠️ Only 2021–2024 supported"
+                warning="⚠️ Please select both date and time"
             )
 
         input_datetime = pd.to_datetime(date + " " + time)
@@ -295,7 +295,7 @@ def predict():
         print(f"❌ ERROR: {e}")
         return render_template(
             "index.html",
-            warning="⚠️ Only 2021–2024 supported"
+            warning="⚠️ Please enter a valid date and time"
         )
 
 
