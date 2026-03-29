@@ -171,17 +171,18 @@ def predict():
         print(f"\n🔍 PREDICTING {city} at {input_datetime}")
 
         # =========================
-        # DATE RANGE VALIDATION (NEW)
+        # STRICT YEAR VALIDATION (2021-2023 ONLY)
         # =========================
-        start_date = pd.to_datetime("2021-01-01")
-        end_date = pd.to_datetime("2024-12-31")
+        input_year = input_datetime.year
         date_warning = None
         
-        if input_datetime < start_date or input_datetime > end_date:
-            date_warning = f"⚠️ Warning: Date {input_datetime.strftime('%Y-%m-%d')} is outside training data range (2021-2024). Predictions may be less accurate."
-
-        print(f"📅 Date check: {input_datetime.strftime('%Y-%m-%d')} {'✅ IN RANGE' if start_date <= input_datetime <= end_date else '⚠️ OUTSIDE RANGE'}")
-
+        if input_year not in [2021, 2022, 2023]:
+            date_warning = f"⚠️ ERROR: Only supports years 2021-2023. Year {input_year} is not supported."
+            print(f"🚫 INVALID YEAR: {input_year} - NO OUTPUT")
+            return render_template("index.html", date_warning=date_warning, forecast=None)
+        
+        print(f"📅 Valid year: {input_year} ✅")
+        
         micro_df, macro_df = load_data()
 
         # =========================
@@ -278,24 +279,11 @@ def predict():
         print(f"📈 Final forecast: {[(f['temp'], f['hum'], f['wind']) for f in forecast]}")
         print("✅ Prediction complete!\n")
 
-        return render_template("index.html", forecast=forecast, date_warning=date_warning)
+        return render_template("index.html", forecast=forecast)
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
-        pred_real = fallback_weather("Coimbatore")
-        forecast = []
-
-        for i in range(5):
-            future_time = pd.Timestamp.now() + timedelta(hours=i + 1)
-            temp, hum, wind = fix_values(pred_real[i][0], pred_real[i][1], pred_real[i][2], "Coimbatore")
-            forecast.append({
-                "time": future_time.strftime("%Y-%m-%d %H:%M"),
-                "temp": temp,
-                "hum": hum,
-                "wind": wind
-            })
-
-        return render_template("index.html", forecast=forecast)
+        return render_template("index.html", date_warning="⚠️ Prediction error occurred", forecast=None)
 
 
 if __name__ == "__main__":
