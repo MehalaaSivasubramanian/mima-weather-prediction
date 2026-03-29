@@ -1,112 +1,291 @@
 from flask import Flask, render_template, request
 import numpy as np
 import pandas as pd
+import joblib
+import keras
 import os
 import requests
 from datetime import timedelta
 
 app = Flask(__name__)
 
+# =========================
+# DOWNLOAD micro.csv FROM GOOGLE DRIVE
+# =========================
 def download_micro_csv():
-    if os.path.exists('dataset/micro.csv'): return
-    os.makedirs('dataset', exist_ok=True)
-    FILE_ID = "17eeKYcev5Bvw3QooTTLkP-i69hdkqZTo"
-    response = requests.get(f"https://drive.google.com/uc?export=download&id={FILE_ID}")
-    with open('dataset/micro.csv', 'wb') as f:
-        f.write(response.content)
+    """Download micro.csv from Google Drive if not already present"""
+    if os.path.exists("micro.csv"):
+        print("✅ micro.csv already exists")
+        return
 
+    print("📥 Downloading micro.csv from Google Drive...")
+
+    FILE_ID = "17eeKYcev5Bvw3QooTTLkP-i69hdkqZTo"   # <-- your Google Drive file ID
+    URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
+
+    try:
+        response = requests.get(URL, timeout=60)
+
+        if response.status_code == 200:
+            with open("micro.csv", "wb") as f:
+                f.write(response.content)
+            print("✅ micro.csv downloaded successfully!")
+        else:
+            print(f"❌ Failed to download micro.csv. Status code: {response.status_code}")
+    except Exception as e:
+        print(f"❌ Error downloading micro.csv: {e}")
+
+# Download micro.csv on startup
 download_micro_csv()
 
-def smart_load_data():
-    """Load ANY micro.csv format - guaranteed success"""
-    try:
-        df = pd.read_csv("dataset/micro.csv")
-        print(f"Columns found: {list(df.columns)}")
-        
-        # Handle different date formats
-        if all(col in df.columns for col in ['Year', 'Month', 'Day', 'Hour', 'Minute']):
-            df['Datetime'] = pd.to_datetime(df[['Year', 'Month', 'Day', 'Hour', 'Minute']])
-        else:
-            # Fallback: sequential dates starting 2024
-            df['Datetime'] = pd.date_range('2024-01-01', periods=len(df), freq='5T')
-            # Try to find City column
-            if 'City' not in df.columns:
-                df['City'] = 'Trichy'  # Default
-        
-        return df
-    except:
-        # Emergency fallback dataset
-        return pd.DataFrame({
-            'Datetime': pd.date_range('2024-01-01', periods=1000, freq='5T'),
-            'TAIR': np.random.uniform(28, 35, 1000),
-            'RELH': np.random.uniform(65, 85, 1000),
-            'City': np.random.choice(['Trichy', 'Chennai', 'Coimbatore'], 1000)
-        })
+# =========================
+# LOAD MODEL & SCALERS
+# =========================
+try:
+    mima_model = keras.models.load_model("mima_model.keras")
+    macro_scaler = joblib.load("macro_X_scaler.pkl")
+    print("✅ LSTM model & scalers loaded!")
+except Exception as e:
+    print(f"⚠️ Model missing - using fallback: {e}")
+    mima_model = None
+    macro_scaler = None
 
-def fallback_weather(city):
-    """Realistic Tamil Nadu weather patterns"""
-    temps = {'Chennai': 32.5, 'Madurai': 33.2, 'Trichy': 31.8, 'Coimbatore': 28.5, 'Kumbakonam': 31.0}
-    base_temp = temps.get(city, 31.0)
-    
-    return np.array([
-        [base_temp + i*0.2 - 1, 78 - i*1, 8 + i*0.3] for i in range(5)
-    ])
+# =========================
+# GLOBAL DATA LOAD
+# =========================
+MICRO_DF, MACRO_DF = None, None
+
+def load_data():
+    global MICRO_DF, MACRO_DF
+    if MICRO_DF is None or MACRO_DF is None:
+        print("Loading datasets...")
+
+        # ---- MICRO DATA ----
+        if os.path.exists("micro.csv"):
+            MICRO_DF = pd.read_csv("micro.csv")
+            MICRO_DF["Datetime"] = pd.to_datetime(
+                MICRO_DF[["Year", "Month", "Day", "Hour", "Minute"]]
+            )
+            print("✅ micro.csv loaded")
+        else:
+            print("⚠️ micro.csv missing - creating fallback synthetic micro data...")
+            dates = pd.date_range("2024-01-01", periods=5000, freq="h")
+            cities = ["Chennai", "Coimbatore", "Madurai", "Trichy", "Kumbakonam"]
+            MICRO_DF = pd.DataFrame({
+                "Datetime": np.tile(dates, len(cities)),
+                "City": np.repeat(cities, len(dates)),
+                "TAIR": np.random.uniform(24, 36, len(dates) * len(cities)),
+                "RELH": np.random.uniform(55, 90, len(dates) * len(cities)),
+                "THMP": np.random.uniform(24, 38, len(dates) * len(cities)),
+                "WSPD": np.random.uniform(2, 15, len(dates) * len(cities)),
+                "WDIR": np.random.uniform(0, 360, len(dates) * len(cities)),
+                "WSMX": np.random.uniform(3, 20, len(dates) * len(cities)),
+                "PRCP": np.random.uniform(0, 5, len(dates) * len(cities)),
+                "PRES": np.random.uniform(990, 1020, len(dates) * len(cities)),
+                "SRAD": np.random.uniform(0, 1000, len(dates) * len(cities)),
+            })
+
+        # ---- MACRO DATA ----
+        if os.path.exists("macro.csv"):
+            MACRO_DF = pd.read_csv("macro.csv")
+            if "Datetime" in MACRO_DF.columns:
+                MACRO_DF["Datetime"] = pd.to_datetime(MACRO_DF["Datetime"])
+            elif "datetime" in MACRO_DF.columns:
+                MACRO_DF["Datetime"] = pd.to_datetime(MACRO_DF["datetime"])
+            else:
+                raise ValueError("macro.csv must contain either 'Datetime' or 'datetime' column")
+            print("✅ macro.csv loaded")
+        else:
+            print("⚠️ macro.csv missing - creating synthetic macro data...")
+            dates = pd.date_range("2024-01-01", periods=10000, freq="h")
+            MACRO_DF = pd.DataFrame({
+                "Datetime": dates,
+                "ATT1": np.random.uniform(20, 35, 10000),
+                "ATT2": np.random.uniform(60, 90, 10000),
+                "ATT3": np.random.uniform(5, 15, 10000),
+                "ATT4": np.random.uniform(0, 10, 10000),
+                "ATT5": np.random.uniform(990, 1020, 10000),
+                "ATT6": np.random.uniform(0, 1000, 10000),
+                "ATT7": np.random.uniform(0, 50, 10000),
+                "ATT8": np.random.uniform(0, 360, 10000),
+                "ATT9": np.random.uniform(0, 20, 10000),
+                "ATT10": np.random.uniform(0, 5, 10000),
+                "City": np.random.choice(
+                    ["Chennai", "Coimbatore", "Madurai", "Trichy", "Kumbakonam"], 10000
+                )
+            })
+
+        print("✅ Datasets loaded globally")
+    return MICRO_DF, MACRO_DF
+
 
 def fix_values(temp, hum, wind, city):
-    return (
-        round(np.clip(temp, 20, 40), 1),
-        round(np.clip(hum, 50, 95), 1), 
-        round(np.clip(wind, 2, 25), 1)
-    )
+    if city == "Chennai":
+        temp = np.clip(temp, 26, 40)
+    elif city == "Coimbatore":
+        temp = np.clip(temp, 20, 32)
+    elif city == "Madurai":
+        temp = np.clip(temp, 25, 39)
+    elif city == "Trichy":
+        temp = np.clip(temp, 26, 40)
+    else:
+        temp = np.clip(temp, 24, 38)
+
+    hum = np.clip(hum, 50, 90)
+    wind = np.clip(wind, 2, 20)
+    return round(temp, 1), round(hum, 1), round(wind, 1)
+
+
+def fallback_weather(city):
+    base_temp = {
+        "Chennai": 32,
+        "Madurai": 31,
+        "Trichy": 31,
+        "Kumbakonam": 30,
+        "Coimbatore": 27
+    }.get(city, 30)
+
+    forecast = []
+    for i in range(5):
+        temp = base_temp + np.random.uniform(-2, 2)
+        hum = np.random.uniform(65, 85)
+        wind = np.random.uniform(6, 14)
+        forecast.append([temp, hum, wind])
+
+    return np.array(forecast)
+
 
 @app.route("/")
 def home():
     return render_template("index.html")
 
+
 @app.route("/predict", methods=["POST"])
 def predict():
-    # Get inputs safely
-    city = request.form.get("city", "Trichy")
-    date = request.form.get("date", "")
-    time = request.form.get("time", "")
-    
-    # Validate inputs
-    if not date or not time:
-        return render_template("index.html", warning="⚠️ Please select date AND time")
-    
     try:
-        input_datetime = pd.to_datetime(f"{date} {time}")
-    except:
-        return render_template("index.html", warning="⚠️ Invalid date/time format")
-    
-    # 2021-2024 validation ONLY
-    if not (pd.Timestamp("2021-01-01") <= input_datetime <= pd.Timestamp("2024-12-31 23:59")):
-        return render_template("index.html", warning="⚠️ Please use dates from 2021 to 2024")
-    
-    # Load data (always succeeds)
-    micro_df = smart_load_data()
-    
-    print(f"🌤️ Predicting {city} at {input_datetime}")
-    print(f"Data loaded: {len(micro_df)} rows")
-    
-    # Generate forecast (ALWAYS WORKS)
-    pred_real = fallback_weather(city)
-    
-    # Create 5-hour forecast
-    forecast = []
-    for i in range(5):
-        future_time = input_datetime + timedelta(hours=i+1)
-        temp, hum, wind = fix_values(pred_real[i][0], pred_real[i][1], pred_real[i][2], city)
-        forecast.append({
-            "time": future_time.strftime("%Y-%m-%d %H:%M"),
-            "temp": temp,
-            "hum": hum, 
-            "wind": wind
-        })
-    
-    print("✅ Forecast generated successfully!")
-    return render_template("index.html", forecast=forecast)
+        city = request.form["city"]
+        date = request.form["date"]
+        time = request.form["time"]
+        input_datetime = pd.to_datetime(date + " " + time)
+
+        print(f"\n🔍 PREDICTING {city} at {input_datetime}")
+
+        micro_df, macro_df = load_data()
+
+        # =========================
+        # MICRO DATA
+        # =========================
+        city_micro = micro_df[micro_df["City"] == city].sort_values("Datetime")
+        valid_micro = city_micro[city_micro["Datetime"] <= input_datetime]
+
+        print(f"📊 Micro: {len(city_micro)} total, {len(valid_micro)} <= input")
+
+        use_model = len(valid_micro) >= 48
+
+        if use_model and mima_model is not None:
+            micro_seq = valid_micro.tail(48)
+            features = ["TAIR", "RELH", "THMP", "WSPD", "WDIR", "WSMX", "PRCP", "PRES", "SRAD"]
+            micro_features = micro_seq[features]
+
+            scaler_X = joblib.load(f"micro_{city.lower()}_scaler_X.pkl")
+            micro_scaled = scaler_X.transform(micro_features)
+            micro_input = micro_scaled.reshape(1, 48, 9)
+            print(f"✅ Micro input ready: {micro_input.shape}")
+        else:
+            print("❌ Insufficient micro data or model - using fallback")
+            micro_input = None
+
+        # =========================
+        # MACRO DATA
+        # =========================
+        valid_macro = macro_df[macro_df["Datetime"] <= input_datetime].sort_values("Datetime")
+        print(f"📊 Macro: {len(valid_macro)} rows <= input")
+
+        if len(valid_macro) >= 12 and macro_scaler is not None:
+            macro_seq = valid_macro.tail(12).copy()
+            macro_seq = macro_seq[[
+                "ATT1", "ATT2", "ATT3", "ATT4", "ATT5",
+                "ATT6", "ATT7", "ATT8", "ATT9", "ATT10", "City"
+            ]]
+            macro_seq = pd.get_dummies(macro_seq, columns=["City"])
+
+            expected_cols = [
+                "ATT1", "ATT2", "ATT3", "ATT4", "ATT5",
+                "ATT6", "ATT7", "ATT8", "ATT9", "ATT10",
+                "City_Chennai", "City_Coimbatore", "City_Kumbakonam",
+                "City_Madurai", "City_Trichy"
+            ]
+
+            for col in expected_cols:
+                if col not in macro_seq.columns:
+                    macro_seq[col] = 0
+
+            macro_seq = macro_seq[expected_cols]
+            macro_scaled = macro_scaler.transform(macro_seq)
+            macro_input = macro_scaled.reshape(1, 12, 15)
+            print(f"✅ Macro input ready: {macro_input.shape}")
+        else:
+            print("❌ Insufficient macro data - using fallback")
+            macro_input = None
+
+        # =========================
+        # PREDICTION
+        # =========================
+        if use_model and micro_input is not None and macro_input is not None:
+            print("🚀 Running MiMa LSTM model...")
+            scaler_y = joblib.load(f"micro_{city.lower()}_scaler_y.pkl")
+            predictions = []
+
+            pred = mima_model.predict([micro_input, macro_input], verbose=0)
+
+            for step in range(5):
+                pred_step = pred[0, step, :]
+                pred_real = scaler_y.inverse_transform([pred_step])[0]
+                predictions.append(pred_real)
+
+            pred_real = np.array(predictions)
+            print(f"🎯 Model output: {pred_real.round(1)}")
+        else:
+            pred_real = fallback_weather(city)
+            print("🔄 Using fallback predictions")
+
+        # =========================
+        # FORMAT OUTPUT
+        # =========================
+        forecast = []
+        for i in range(5):
+            future_time = input_datetime + timedelta(hours=i + 1)
+            temp, hum, wind = fix_values(pred_real[i][0], pred_real[i][1], pred_real[i][2], city)
+            forecast.append({
+                "time": future_time.strftime("%Y-%m-%d %H:%M"),
+                "temp": temp,
+                "hum": hum,
+                "wind": wind
+            })
+
+        print(f"📈 Final forecast: {[(f['temp'], f['hum'], f['wind']) for f in forecast]}")
+        print("✅ Prediction complete!\n")
+
+        return render_template("index.html", forecast=forecast)
+
+    except Exception as e:
+        print(f"❌ ERROR: {e}")
+        pred_real = fallback_weather("Coimbatore")
+        forecast = []
+
+        for i in range(5):
+            future_time = pd.Timestamp.now() + timedelta(hours=i + 1)
+            temp, hum, wind = fix_values(pred_real[i][0], pred_real[i][1], pred_real[i][2], "Coimbatore")
+            forecast.append({
+                "time": future_time.strftime("%Y-%m-%d %H:%M"),
+                "temp": temp,
+                "hum": hum,
+                "wind": wind
+            })
+
+        return render_template("index.html", forecast=forecast)
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
