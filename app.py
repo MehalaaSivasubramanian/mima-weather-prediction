@@ -68,22 +68,7 @@ def load_data():
             )
             print("✅ micro.csv loaded")
         else:
-            print("⚠️ micro.csv missing - creating fallback synthetic micro data...")
-            dates = pd.date_range("2024-01-01", periods=5000, freq="h")
-            cities = ["Chennai", "Coimbatore", "Madurai", "Trichy", "Kumbakonam"]
-            MICRO_DF = pd.DataFrame({
-                "Datetime": np.tile(dates, len(cities)),
-                "City": np.repeat(cities, len(dates)),
-                "TAIR": np.random.uniform(24, 36, len(dates) * len(cities)),
-                "RELH": np.random.uniform(55, 90, len(dates) * len(cities)),
-                "THMP": np.random.uniform(24, 38, len(dates) * len(cities)),
-                "WSPD": np.random.uniform(2, 15, len(dates) * len(cities)),
-                "WDIR": np.random.uniform(0, 360, len(dates) * len(cities)),
-                "WSMX": np.random.uniform(3, 20, len(dates) * len(cities)),
-                "PRCP": np.random.uniform(0, 5, len(dates) * len(cities)),
-                "PRES": np.random.uniform(990, 1020, len(dates) * len(cities)),
-                "SRAD": np.random.uniform(0, 1000, len(dates) * len(cities)),
-            })
+            raise FileNotFoundError("micro.csv not found")
 
         # ---- MACRO DATA ----
         if os.path.exists("macro.csv"):
@@ -96,24 +81,7 @@ def load_data():
                 raise ValueError("macro.csv must contain either 'Datetime' or 'datetime' column")
             print("✅ macro.csv loaded")
         else:
-            print("⚠️ macro.csv missing - creating synthetic macro data...")
-            dates = pd.date_range("2024-01-01", periods=10000, freq="h")
-            MACRO_DF = pd.DataFrame({
-                "Datetime": dates,
-                "ATT1": np.random.uniform(20, 35, 10000),
-                "ATT2": np.random.uniform(60, 90, 10000),
-                "ATT3": np.random.uniform(5, 15, 10000),
-                "ATT4": np.random.uniform(0, 10, 10000),
-                "ATT5": np.random.uniform(990, 1020, 10000),
-                "ATT6": np.random.uniform(0, 1000, 10000),
-                "ATT7": np.random.uniform(0, 50, 10000),
-                "ATT8": np.random.uniform(0, 360, 10000),
-                "ATT9": np.random.uniform(0, 20, 10000),
-                "ATT10": np.random.uniform(0, 5, 10000),
-                "City": np.random.choice(
-                    ["Chennai", "Coimbatore", "Madurai", "Trichy", "Kumbakonam"], 10000
-                )
-            })
+            raise FileNotFoundError("macro.csv not found")
 
         print("✅ Datasets loaded globally")
     return MICRO_DF, MACRO_DF
@@ -136,25 +104,6 @@ def fix_values(temp, hum, wind, city):
     return round(temp, 1), round(hum, 1), round(wind, 1)
 
 
-def fallback_weather(city):
-    base_temp = {
-        "Chennai": 32,
-        "Madurai": 31,
-        "Trichy": 31,
-        "Kumbakonam": 30,
-        "Coimbatore": 27
-    }.get(city, 30)
-
-    forecast = []
-    for i in range(5):
-        temp = base_temp + np.random.uniform(-2, 2)
-        hum = np.random.uniform(65, 85)
-        wind = np.random.uniform(6, 14)
-        forecast.append([temp, hum, wind])
-
-    return np.array(forecast)
-
-
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -162,37 +111,46 @@ def home():
 
 @app.route("/predict", methods=["POST"])
 def predict():
+    city = request.form.get("city")
+    date = request.form.get("date")
+    time = request.form.get("time")
+
+    # =========================
+    # INPUT CHECK
+    # =========================
+    if not date or not time:
+        return render_template(
+            "index.html",
+            warning="⚠️ Please select both date and time"
+        )
+
+    # =========================
+    # SAFE DATE PARSE
+    # =========================
     try:
-        city = request.form["city"]
-        date = request.form["date"]
-        time = request.form["time"]
+        input_datetime = pd.to_datetime(f"{date} {time}")
+    except Exception:
+        return render_template(
+            "index.html",
+            warning="⚠️ Please enter a valid date and time"
+        )
 
-        # =========================
-        # EMPTY INPUT CHECK
-        # =========================
-        if not date or not time:
-            return render_template(
-                "index.html",
-                warning="⚠️ Please select both date and time"
-            )
+    print(f"\n🔍 PREDICTING {city} at {input_datetime}")
 
-        input_datetime = pd.to_datetime(date + " " + time)
+    # =========================
+    # DATE RANGE VALIDATION
+    # =========================
+    min_date = pd.Timestamp("2021-01-01 00:00")
+    max_date = pd.Timestamp("2024-12-31 23:59")
 
-        print(f"\n🔍 PREDICTING {city} at {input_datetime}")
+    if input_datetime < min_date or input_datetime > max_date:
+        print("⚠️ Unsupported date selected")
+        return render_template(
+            "index.html",
+            warning="⚠️ Only 2021–2024 supported"
+        )
 
-        # =========================
-        # DATE RANGE VALIDATION
-        # =========================
-        min_date = pd.Timestamp("2021-01-01 00:00")
-        max_date = pd.Timestamp("2024-12-31 23:59")
-
-        if input_datetime < min_date or input_datetime > max_date:
-            print("⚠️ Unsupported date selected")
-            return render_template(
-                "index.html",
-                warning="⚠️ Only 2021–2024 supported"
-            )
-
+    try:
         micro_df, macro_df = load_data()
 
         # =========================
@@ -203,20 +161,37 @@ def predict():
 
         print(f"📊 Micro: {len(city_micro)} total, {len(valid_micro)} <= input")
 
-        use_model = len(valid_micro) >= 48
+        if len(valid_micro) < 48:
+            return render_template(
+                "index.html",
+                warning="⚠️ Not enough historical micro data for this date/time"
+            )
 
-        if use_model and mima_model is not None:
-            micro_seq = valid_micro.tail(48)
-            features = ["TAIR", "RELH", "THMP", "WSPD", "WDIR", "WSMX", "PRCP", "PRES", "SRAD"]
-            micro_features = micro_seq[features]
+        if mima_model is None:
+            return render_template(
+                "index.html",
+                warning="⚠️ Model file not loaded properly"
+            )
 
-            scaler_X = joblib.load(f"micro_{city.lower()}_scaler_X.pkl")
-            micro_scaled = scaler_X.transform(micro_features)
-            micro_input = micro_scaled.reshape(1, 48, 9)
-            print(f"✅ Micro input ready: {micro_input.shape}")
-        else:
-            print("❌ Insufficient micro data or model - using fallback")
-            micro_input = None
+        micro_seq = valid_micro.tail(48)
+        features = ["TAIR", "RELH", "THMP", "WSPD", "WDIR", "WSMX", "PRCP", "PRES", "SRAD"]
+        micro_features = micro_seq[features]
+
+        scaler_X_path = f"micro_{city.lower()}_scaler_X.pkl"
+        scaler_y_path = f"micro_{city.lower()}_scaler_y.pkl"
+
+        if not os.path.exists(scaler_X_path) or not os.path.exists(scaler_y_path):
+            return render_template(
+                "index.html",
+                warning=f"⚠️ Missing scaler files for {city}"
+            )
+
+        scaler_X = joblib.load(scaler_X_path)
+        scaler_y = joblib.load(scaler_y_path)
+
+        micro_scaled = scaler_X.transform(micro_features)
+        micro_input = micro_scaled.reshape(1, 48, 9)
+        print(f"✅ Micro input ready: {micro_input.shape}")
 
         # =========================
         # MACRO DATA
@@ -224,53 +199,56 @@ def predict():
         valid_macro = macro_df[macro_df["Datetime"] <= input_datetime].sort_values("Datetime")
         print(f"📊 Macro: {len(valid_macro)} rows <= input")
 
-        if len(valid_macro) >= 12 and macro_scaler is not None:
-            macro_seq = valid_macro.tail(12).copy()
-            macro_seq = macro_seq[[
-                "ATT1", "ATT2", "ATT3", "ATT4", "ATT5",
-                "ATT6", "ATT7", "ATT8", "ATT9", "ATT10", "City"
-            ]]
-            macro_seq = pd.get_dummies(macro_seq, columns=["City"])
+        if len(valid_macro) < 12:
+            return render_template(
+                "index.html",
+                warning="⚠️ Not enough historical macro data for this date/time"
+            )
 
-            expected_cols = [
-                "ATT1", "ATT2", "ATT3", "ATT4", "ATT5",
-                "ATT6", "ATT7", "ATT8", "ATT9", "ATT10",
-                "City_Chennai", "City_Coimbatore", "City_Kumbakonam",
-                "City_Madurai", "City_Trichy"
-            ]
+        if macro_scaler is None:
+            return render_template(
+                "index.html",
+                warning="⚠️ Macro scaler not loaded properly"
+            )
 
-            for col in expected_cols:
-                if col not in macro_seq.columns:
-                    macro_seq[col] = 0
+        macro_seq = valid_macro.tail(12).copy()
+        macro_seq = macro_seq[[
+            "ATT1", "ATT2", "ATT3", "ATT4", "ATT5",
+            "ATT6", "ATT7", "ATT8", "ATT9", "ATT10", "City"
+        ]]
+        macro_seq = pd.get_dummies(macro_seq, columns=["City"])
 
-            macro_seq = macro_seq[expected_cols]
-            macro_scaled = macro_scaler.transform(macro_seq)
-            macro_input = macro_scaled.reshape(1, 12, 15)
-            print(f"✅ Macro input ready: {macro_input.shape}")
-        else:
-            print("❌ Insufficient macro data - using fallback")
-            macro_input = None
+        expected_cols = [
+            "ATT1", "ATT2", "ATT3", "ATT4", "ATT5",
+            "ATT6", "ATT7", "ATT8", "ATT9", "ATT10",
+            "City_Chennai", "City_Coimbatore", "City_Kumbakonam",
+            "City_Madurai", "City_Trichy"
+        ]
+
+        for col in expected_cols:
+            if col not in macro_seq.columns:
+                macro_seq[col] = 0
+
+        macro_seq = macro_seq[expected_cols]
+        macro_scaled = macro_scaler.transform(macro_seq)
+        macro_input = macro_scaled.reshape(1, 12, 15)
+        print(f"✅ Macro input ready: {macro_input.shape}")
 
         # =========================
         # PREDICTION
         # =========================
-        if use_model and micro_input is not None and macro_input is not None:
-            print("🚀 Running MiMa LSTM model...")
-            scaler_y = joblib.load(f"micro_{city.lower()}_scaler_y.pkl")
-            predictions = []
+        print("🚀 Running MiMa LSTM model...")
+        predictions = []
 
-            pred = mima_model.predict([micro_input, macro_input], verbose=0)
+        pred = mima_model.predict([micro_input, macro_input], verbose=0)
 
-            for step in range(5):
-                pred_step = pred[0, step, :]
-                pred_real = scaler_y.inverse_transform([pred_step])[0]
-                predictions.append(pred_real)
+        for step in range(5):
+            pred_step = pred[0, step, :]
+            pred_real = scaler_y.inverse_transform([pred_step])[0]
+            predictions.append(pred_real)
 
-            pred_real = np.array(predictions)
-            print(f"🎯 Model output: {pred_real.round(1)}")
-        else:
-            pred_real = fallback_weather(city)
-            print("🔄 Using fallback predictions")
+        pred_real = np.array(predictions)
+        print(f"🎯 Model output: {pred_real.round(1)}")
 
         # =========================
         # FORMAT OUTPUT
@@ -292,10 +270,10 @@ def predict():
         return render_template("index.html", forecast=forecast)
 
     except Exception as e:
-        print(f"❌ ERROR: {e}")
+        print(f"❌ REAL ERROR: {e}")
         return render_template(
             "index.html",
-            warning="⚠️ Please enter a valid date and time"
+            warning=f"⚠️ Prediction failed: {str(e)}"
         )
 
 
