@@ -13,7 +13,7 @@
         <form method="POST" action="/predict" class="weather-form">
             <div class="form-group">
                 <label>🌆 Select City</label>
-                <select name="city">
+                <select name="city" required>
                     <option value="Chennai">Chennai</option>
                     <option value="Madurai">Madurai</option>
                     <option value="Kumbakonam">Kumbakonam</option>
@@ -24,7 +24,7 @@
             
             <div class="form-group">
                 <label>📅 Date</label>
-                <input type="date" name="date" min="2021-01-01" max="2024-12-31" required>
+                <input type="date" name="date" required>
             </div>
             
             <div class="form-group">
@@ -32,13 +32,13 @@
                 <input type="time" name="time" required>
             </div>
             
-            <button type="submit" class="predict-btn">🔮 Predict</button>
-
             {% if warning %}
             <div class="warning-box">
                 {{ warning }}
             </div>
             {% endif %}
+            
+            <button type="submit" class="predict-btn">🔮 Predict</button>
         </form>
 
         {% if forecast %}
