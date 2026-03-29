@@ -166,6 +166,16 @@ def predict():
         city = request.form["city"]
         date = request.form["date"]
         time = request.form["time"]
+
+        # =========================
+        # INPUT CHECK
+        # =========================
+        if not date or not time:
+            return render_template(
+                "index.html",
+                warning="⚠️ Only 2021–2024 supported"
+            )
+
         input_datetime = pd.to_datetime(date + " " + time)
 
         print(f"\n🔍 PREDICTING {city} at {input_datetime}")
@@ -285,7 +295,7 @@ def predict():
         print(f"❌ ERROR: {e}")
         return render_template(
             "index.html",
-            warning="⚠️ Something went wrong. Please try again."
+            warning="⚠️ Only 2021–2024 supported"
         )
 
 
