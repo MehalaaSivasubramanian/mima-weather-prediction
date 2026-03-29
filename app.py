@@ -170,6 +170,18 @@ def predict():
 
         print(f"\n🔍 PREDICTING {city} at {input_datetime}")
 
+        # =========================
+        # DATE RANGE VALIDATION (NEW)
+        # =========================
+        start_date = pd.to_datetime("2021-01-01")
+        end_date = pd.to_datetime("2024-12-31")
+        date_warning = None
+        
+        if input_datetime < start_date or input_datetime > end_date:
+            date_warning = f"⚠️ Warning: Date {input_datetime.strftime('%Y-%m-%d')} is outside training data range (2021-2024). Predictions may be less accurate."
+
+        print(f"📅 Date check: {input_datetime.strftime('%Y-%m-%d')} {'✅ IN RANGE' if start_date <= input_datetime <= end_date else '⚠️ OUTSIDE RANGE'}")
+
         micro_df, macro_df = load_data()
 
         # =========================
@@ -266,7 +278,7 @@ def predict():
         print(f"📈 Final forecast: {[(f['temp'], f['hum'], f['wind']) for f in forecast]}")
         print("✅ Prediction complete!\n")
 
-        return render_template("index.html", forecast=forecast)
+        return render_template("index.html", forecast=forecast, date_warning=date_warning)
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
