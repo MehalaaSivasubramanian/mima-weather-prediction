@@ -171,26 +171,22 @@ def predict():
         print(f"\n🔍 PREDICTING {city} at {input_datetime}")
 
         # =========================
-        # STRICT YEAR VALIDATION (2021-2023 ONLY)
+        # STRICT YEAR VALIDATION - ONLY 2021, 2022, 2023 ALLOWED
         # =========================
         input_year = input_datetime.year
-        date_warning = None
         
         if input_year not in [2021, 2022, 2023]:
-            date_warning = f"⚠️ ERROR: Only supports years 2021-2023. Year {input_year} is not supported."
-            print(f"🚫 INVALID YEAR: {input_year} - NO OUTPUT")
-            return render_template("index.html", date_warning=date_warning, forecast=None)
+            error_message = f"❌ ERROR: Dataset only has data for 2021-2023 only! Year {input_year} is NOT supported."
+            print(f"🚫 BLOCKED YEAR {input_year}: {error_message}")
+            return render_template("index.html", error_message=error_message)
         
-        print(f"📅 Valid year: {input_year} ✅")
+        print(f"✅ VALID YEAR {input_year} - Processing...")
         
         micro_df, macro_df = load_data()
 
-        # =========================
-        # MICRO DATA
-        # =========================
+        # [ALL EXISTING PREDICTION LOGIC REMAINS SAME - NO CHANGES]
         city_micro = micro_df[micro_df["City"] == city].sort_values("Datetime")
         valid_micro = city_micro[city_micro["Datetime"] <= input_datetime]
-
         print(f"📊 Micro: {len(city_micro)} total, {len(valid_micro)} <= input")
 
         use_model = len(valid_micro) >= 48
@@ -208,9 +204,6 @@ def predict():
             print("❌ Insufficient micro data or model - using fallback")
             micro_input = None
 
-        # =========================
-        # MACRO DATA
-        # =========================
         valid_macro = macro_df[macro_df["Datetime"] <= input_datetime].sort_values("Datetime")
         print(f"📊 Macro: {len(valid_macro)} rows <= input")
 
@@ -241,9 +234,6 @@ def predict():
             print("❌ Insufficient macro data - using fallback")
             macro_input = None
 
-        # =========================
-        # PREDICTION
-        # =========================
         if use_model and micro_input is not None and macro_input is not None:
             print("🚀 Running MiMa LSTM model...")
             scaler_y = joblib.load(f"micro_{city.lower()}_scaler_y.pkl")
@@ -262,9 +252,6 @@ def predict():
             pred_real = fallback_weather(city)
             print("🔄 Using fallback predictions")
 
-        # =========================
-        # FORMAT OUTPUT
-        # =========================
         forecast = []
         for i in range(5):
             future_time = input_datetime + timedelta(hours=i + 1)
@@ -283,7 +270,7 @@ def predict():
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
-        return render_template("index.html", date_warning="⚠️ Prediction error occurred", forecast=None)
+        return render_template("index.html", error_message="⚠️ Prediction error. Please check your input.")
 
 
 if __name__ == "__main__":
