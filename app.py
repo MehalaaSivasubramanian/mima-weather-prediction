@@ -4,9 +4,39 @@ import pandas as pd
 import joblib
 import keras
 import os
+import requests
 from datetime import timedelta
 
 app = Flask(__name__)
+
+# =========================
+# DOWNLOAD micro.csv FROM GOOGLE DRIVE
+# =========================
+def download_micro_csv():
+    """Download micro.csv from Google Drive if not already present"""
+    if os.path.exists("micro.csv"):
+        print("✅ micro.csv already exists")
+        return
+
+    print("📥 Downloading micro.csv from Google Drive...")
+
+    FILE_ID = "17eeKYcev5Bvw3QooTTLkP-i69hdkqZTo"   # <-- your Google Drive file ID
+    URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
+
+    try:
+        response = requests.get(URL, timeout=60)
+
+        if response.status_code == 200:
+            with open("micro.csv", "wb") as f:
+                f.write(response.content)
+            print("✅ micro.csv downloaded successfully!")
+        else:
+            print(f"❌ Failed to download micro.csv. Status code: {response.status_code}")
+    except Exception as e:
+        print(f"❌ Error downloading micro.csv: {e}")
+
+# Download micro.csv on startup
+download_micro_csv()
 
 # =========================
 # LOAD MODEL & SCALERS
@@ -31,15 +61,16 @@ def load_data():
         print("Loading datasets...")
 
         # ---- MICRO DATA ----
-        # If micro.csv is not uploaded, fallback synthetic data will be used
         if os.path.exists("micro.csv"):
             MICRO_DF = pd.read_csv("micro.csv")
-            MICRO_DF["Datetime"] = pd.to_datetime(MICRO_DF[["Year", "Month", "Day", "Hour", "Minute"]])
+            MICRO_DF["Datetime"] = pd.to_datetime(
+                MICRO_DF[["Year", "Month", "Day", "Hour", "Minute"]]
+            )
             print("✅ micro.csv loaded")
         else:
             print("⚠️ micro.csv missing - creating fallback synthetic micro data...")
-            dates = pd.date_range('2024-01-01', periods=5000, freq='H')
-            cities = ['Chennai', 'Coimbatore', 'Madurai', 'Trichy', 'Kumbakonam']
+            dates = pd.date_range("2024-01-01", periods=5000, freq="h")
+            cities = ["Chennai", "Coimbatore", "Madurai", "Trichy", "Kumbakonam"]
             MICRO_DF = pd.DataFrame({
                 "Datetime": np.tile(dates, len(cities)),
                 "City": np.repeat(cities, len(dates)),
@@ -66,20 +97,22 @@ def load_data():
             print("✅ macro.csv loaded")
         else:
             print("⚠️ macro.csv missing - creating synthetic macro data...")
-            dates = pd.date_range('2024-01-01', periods=10000, freq='H')
+            dates = pd.date_range("2024-01-01", periods=10000, freq="h")
             MACRO_DF = pd.DataFrame({
-                'Datetime': dates,
-                'ATT1': np.random.uniform(20, 35, 10000),
-                'ATT2': np.random.uniform(60, 90, 10000),
-                'ATT3': np.random.uniform(5, 15, 10000),
-                'ATT4': np.random.uniform(0, 10, 10000),
-                'ATT5': np.random.uniform(990, 1020, 10000),
-                'ATT6': np.random.uniform(0, 1000, 10000),
-                'ATT7': np.random.uniform(0, 50, 10000),
-                'ATT8': np.random.uniform(0, 360, 10000),
-                'ATT9': np.random.uniform(0, 20, 10000),
-                'ATT10': np.random.uniform(0, 5, 10000),
-                'City': np.random.choice(['Chennai', 'Coimbatore', 'Madurai', 'Trichy', 'Kumbakonam'], 10000)
+                "Datetime": dates,
+                "ATT1": np.random.uniform(20, 35, 10000),
+                "ATT2": np.random.uniform(60, 90, 10000),
+                "ATT3": np.random.uniform(5, 15, 10000),
+                "ATT4": np.random.uniform(0, 10, 10000),
+                "ATT5": np.random.uniform(990, 1020, 10000),
+                "ATT6": np.random.uniform(0, 1000, 10000),
+                "ATT7": np.random.uniform(0, 50, 10000),
+                "ATT8": np.random.uniform(0, 360, 10000),
+                "ATT9": np.random.uniform(0, 20, 10000),
+                "ATT10": np.random.uniform(0, 5, 10000),
+                "City": np.random.choice(
+                    ["Chennai", "Coimbatore", "Madurai", "Trichy", "Kumbakonam"], 10000
+                )
             })
 
         print("✅ Datasets loaded globally")
@@ -170,7 +203,10 @@ def predict():
 
         if len(valid_macro) >= 12 and macro_scaler is not None:
             macro_seq = valid_macro.tail(12).copy()
-            macro_seq = macro_seq[["ATT1", "ATT2", "ATT3", "ATT4", "ATT5", "ATT6", "ATT7", "ATT8", "ATT9", "ATT10", "City"]]
+            macro_seq = macro_seq[[
+                "ATT1", "ATT2", "ATT3", "ATT4", "ATT5",
+                "ATT6", "ATT7", "ATT8", "ATT9", "ATT10", "City"
+            ]]
             macro_seq = pd.get_dummies(macro_seq, columns=["City"])
 
             expected_cols = [
@@ -199,21 +235,13 @@ def predict():
             print("🚀 Running MiMa LSTM model...")
             scaler_y = joblib.load(f"micro_{city.lower()}_scaler_y.pkl")
             predictions = []
-            current_micro = micro_input.copy()
 
-            pred = mima_model.predict([current_micro, macro_input], verbose=0)
+            pred = mima_model.predict([micro_input, macro_input], verbose=0)
 
             for step in range(5):
                 pred_step = pred[0, step, :]
                 pred_real = scaler_y.inverse_transform([pred_step])[0]
                 predictions.append(pred_real)
-
-                next_row = current_micro[0, -1, :].copy()
-                next_row[0] = pred_step[0]  # TAIR
-                next_row[1] = pred_step[1]  # RELH
-                next_row[3] = pred_step[2]  # WSPD
-                current_micro = np.roll(current_micro, -1, axis=1)
-                current_micro[0, -1, :] = next_row
 
             pred_real = np.array(predictions)
             print(f"🎯 Model output: {pred_real.round(1)}")
