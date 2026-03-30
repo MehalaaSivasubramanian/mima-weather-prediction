@@ -16,6 +16,7 @@ mima_model = None
 macro_scaler = None
 micro_df = None
 macro_df = None
+loaded = False
 
 # -------------------------
 # Download micro.csv from Google Drive
@@ -51,36 +52,31 @@ def load_data():
     global micro_df, macro_df
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
     micro_path = os.path.join(BASE_DIR, "micro.csv")
     macro_path = os.path.join(BASE_DIR, "macro.csv")
 
     MICRO_ID = "1YyNi7cFLHm2VIei234lpIqC0y64jWdVt"
 
-    # Download micro.csv from Drive
     download_file(MICRO_ID, micro_path)
 
-    # Read files
+    print("📂 Reading micro.csv...")
     micro_df = pd.read_csv(micro_path)
+
+    print("📂 Reading macro.csv...")
     macro_df = pd.read_csv(macro_path)
 
-    # Clean column names
     micro_df.columns = micro_df.columns.str.strip()
     macro_df.columns = macro_df.columns.str.strip()
 
     print("📌 MICRO COLUMNS:", list(micro_df.columns))
     print("📌 MACRO COLUMNS:", list(macro_df.columns))
 
-    # -------------------------
-    # MICRO: Create Datetime
-    # -------------------------
+    # MICRO → build Datetime
     micro_df["Datetime"] = pd.to_datetime(
         micro_df[["Year", "Month", "Day", "Hour", "Minute"]]
     )
 
-    # -------------------------
-    # MACRO: Rename datetime -> Datetime
-    # -------------------------
+    # MACRO → rename datetime to Datetime
     if "datetime" in macro_df.columns:
         macro_df.rename(columns={"datetime": "Datetime"}, inplace=True)
 
@@ -96,16 +92,25 @@ def load_models():
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    try:
-        mima_model = load_model(os.path.join(BASE_DIR, "mima_model.keras"))
-        macro_scaler = joblib.load(os.path.join(BASE_DIR, "macro_X_scaler.pkl"))
+    print("📦 Loading mima_model.keras...")
+    mima_model = load_model(os.path.join(BASE_DIR, "mima_model.keras"))
 
-        print("✅ Models loaded successfully")
+    print("📦 Loading macro_X_scaler.pkl...")
+    macro_scaler = joblib.load(os.path.join(BASE_DIR, "macro_X_scaler.pkl"))
 
-    except Exception as e:
-        print(f"❌ Model load error: {e}")
-        mima_model = None
-        macro_scaler = None
+    print("✅ Models loaded successfully")
+
+# -------------------------
+# Lazy Loader
+# -------------------------
+def ensure_loaded():
+    global loaded
+    if not loaded:
+        print("🚀 First-time loading started...")
+        load_data()
+        load_models()
+        loaded = True
+        print("✅ First-time loading completed")
 
 # -------------------------
 # Fallback
@@ -134,12 +139,6 @@ def fix_values(temp, hum, wind):
     return temp, hum, wind
 
 # -------------------------
-# Initialize once
-# -------------------------
-load_data()
-load_models()
-
-# -------------------------
 # Routes
 # -------------------------
 @app.route("/")
@@ -149,6 +148,8 @@ def home():
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
+        ensure_loaded()
+
         city = request.form["city"]
         date = request.form["date"]
         time = request.form["time"]
@@ -167,10 +168,8 @@ def predict():
             print(f"🚫 BLOCKED YEAR {input_year}")
             return render_template("index.html", warning=warning)
 
-        print(f"✅ VALID YEAR {input_year} - Processing...")
-
         # -------------------------
-        # City mapping for scaler files
+        # City mapping
         # -------------------------
         city_map = {
             "Chennai": "chennai",
@@ -213,7 +212,6 @@ def predict():
         # MACRO INPUT
         # -------------------------
         valid_macro = macro_df[macro_df["Datetime"] <= input_datetime].sort_values("Datetime")
-
         print(f"📊 Macro rows available: {len(valid_macro)}")
 
         if len(valid_macro) >= 12 and macro_scaler is not None:
@@ -251,7 +249,6 @@ def predict():
         # -------------------------
         if micro_input is not None and macro_input is not None and scaler_y is not None:
             print("🚀 Running MiMa model...")
-
             pred = mima_model.predict([micro_input, macro_input], verbose=0)
 
             predictions = []
@@ -267,7 +264,7 @@ def predict():
             print("🔄 Using fallback predictions")
 
         # -------------------------
-        # Format forecast
+        # Forecast formatting
         # -------------------------
         forecast = []
         for i in range(5):
@@ -289,4 +286,4 @@ def predict():
         return render_template("index.html", warning=f"⚠️ Prediction failed: {str(e)}")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=10000, debug=True)
