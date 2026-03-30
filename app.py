@@ -2,7 +2,7 @@ from flask import Flask, render_template, request
 import numpy as np
 import pandas as pd
 import joblib
-import keras
+from tensorflow import keras   # ✅ FIXED
 import os
 import requests
 from datetime import timedelta
@@ -13,7 +13,6 @@ app = Flask(__name__)
 # DOWNLOAD micro.csv FROM GOOGLE DRIVE
 # =========================
 def download_micro_csv():
-    """Download micro.csv from Google Drive if not already present"""
     if os.path.exists("micro.csv"):
         print("✅ micro.csv already exists")
         return
@@ -35,14 +34,13 @@ def download_micro_csv():
     except Exception as e:
         print(f"❌ Error downloading micro.csv: {e}")
 
-# Download micro.csv on startup
 download_micro_csv()
 
 # =========================
 # LOAD MODEL & SCALERS
 # =========================
 try:
-    mima_model = keras.models.load_model("mima_model.keras")
+    mima_model = keras.models.load_model("mima_model.keras", compile=False)  # ✅ FIXED
     macro_scaler = joblib.load("macro_X_scaler.pkl")
     print("✅ LSTM model & scalers loaded!")
 except Exception as e:
@@ -60,7 +58,6 @@ def load_data():
     if MICRO_DF is None or MACRO_DF is None:
         print("Loading datasets...")
 
-        # ---- MICRO DATA ----
         if os.path.exists("micro.csv"):
             MICRO_DF = pd.read_csv("micro.csv")
             MICRO_DF["Datetime"] = pd.to_datetime(
@@ -85,7 +82,6 @@ def load_data():
                 "SRAD": np.random.uniform(0, 1000, len(dates) * len(cities)),
             })
 
-        # ---- MACRO DATA ----
         if os.path.exists("macro.csv"):
             MACRO_DF = pd.read_csv("macro.csv")
             if "Datetime" in MACRO_DF.columns:
@@ -93,7 +89,7 @@ def load_data():
             elif "datetime" in MACRO_DF.columns:
                 MACRO_DF["Datetime"] = pd.to_datetime(MACRO_DF["datetime"])
             else:
-                raise ValueError("macro.csv must contain either 'Datetime' or 'datetime' column")
+                raise ValueError("macro.csv must contain either 'Datetime' or 'datetime'")
             print("✅ macro.csv loaded")
         else:
             print("⚠️ macro.csv missing - creating synthetic macro data...")
@@ -175,9 +171,6 @@ def predict():
 
         input_datetime = pd.to_datetime(date + " " + time)
 
-        # =========================
-        # DATE RESTRICTION (2021–2024)
-        # =========================
         if input_datetime.year < 2021 or input_datetime.year > 2024:
             return render_template("index.html", error="⚠️ Only 2021–2024 supported")
 
@@ -185,86 +178,37 @@ def predict():
 
         micro_df, macro_df = load_data()
 
-        # =========================
-        # MICRO DATA
-        # =========================
         city_micro = micro_df[micro_df["City"] == city].sort_values("Datetime")
         valid_micro = city_micro[city_micro["Datetime"] <= input_datetime]
-
-        print(f"📊 Micro: {len(city_micro)} total, {len(valid_micro)} <= input")
 
         use_model = len(valid_micro) >= 48
 
         if use_model and mima_model is not None:
             micro_seq = valid_micro.tail(48)
             features = ["TAIR", "RELH", "THMP", "WSPD", "WDIR", "WSMX", "PRCP", "PRES", "SRAD"]
-            micro_features = micro_seq[features]
-
             scaler_X = joblib.load(f"micro_{city.lower()}_scaler_X.pkl")
-            micro_scaled = scaler_X.transform(micro_features)
+            micro_scaled = scaler_X.transform(micro_seq[features])
             micro_input = micro_scaled.reshape(1, 48, 9)
-            print(f"✅ Micro input ready: {micro_input.shape}")
         else:
-            print("❌ Insufficient micro data or model - using fallback")
             micro_input = None
 
-        # =========================
-        # MACRO DATA
-        # =========================
         valid_macro = macro_df[macro_df["Datetime"] <= input_datetime].sort_values("Datetime")
-        print(f"📊 Macro: {len(valid_macro)} rows <= input")
 
         if len(valid_macro) >= 12 and macro_scaler is not None:
-            macro_seq = valid_macro.tail(12).copy()
-            macro_seq = macro_seq[[
-                "ATT1", "ATT2", "ATT3", "ATT4", "ATT5",
-                "ATT6", "ATT7", "ATT8", "ATT9", "ATT10", "City"
-            ]]
+            macro_seq = valid_macro.tail(12)
             macro_seq = pd.get_dummies(macro_seq, columns=["City"])
-
-            expected_cols = [
-                "ATT1", "ATT2", "ATT3", "ATT4", "ATT5",
-                "ATT6", "ATT7", "ATT8", "ATT9", "ATT10",
-                "City_Chennai", "City_Coimbatore", "City_Kumbakonam",
-                "City_Madurai", "City_Trichy"
-            ]
-
-            for col in expected_cols:
-                if col not in macro_seq.columns:
-                    macro_seq[col] = 0
-
-            macro_seq = macro_seq[expected_cols]
             macro_scaled = macro_scaler.transform(macro_seq)
-            macro_input = macro_scaled.reshape(1, 12, 15)
-            print(f"✅ Macro input ready: {macro_input.shape}")
+            macro_input = macro_scaled.reshape(1, 12, -1)
         else:
-            print("❌ Insufficient macro data - using fallback")
             macro_input = None
 
-        # =========================
-        # PREDICTION
-        # =========================
         if use_model and micro_input is not None and macro_input is not None:
-            print("🚀 Running MiMa LSTM model...")
             scaler_y = joblib.load(f"micro_{city.lower()}_scaler_y.pkl")
-            predictions = []
-
             pred = mima_model.predict([micro_input, macro_input], verbose=0)
-
-            for step in range(5):
-                pred_step = pred[0, step, :]
-                pred_real = scaler_y.inverse_transform([pred_step])[0]
-                predictions.append(pred_real)
-
-            pred_real = np.array(predictions)
-            print(f"🎯 Model output: {pred_real.round(1)}")
+            pred_real = np.array([scaler_y.inverse_transform([p])[0] for p in pred[0]])
         else:
             pred_real = fallback_weather(city)
-            print("🔄 Using fallback predictions")
 
-        # =========================
-        # FORMAT OUTPUT
-        # =========================
         forecast = []
         for i in range(5):
             future_time = input_datetime + timedelta(hours=i + 1)
@@ -275,9 +219,6 @@ def predict():
                 "hum": hum,
                 "wind": wind
             })
-
-        print(f"📈 Final forecast: {[(f['temp'], f['hum'], f['wind']) for f in forecast]}")
-        print("✅ Prediction complete!\n")
 
         return render_template("index.html", forecast=forecast)
 
