@@ -237,7 +237,7 @@ def predict():
                 "wind": wind
             })
 
-        return render_template("index.html", forecast=forecast, error=f"⚠️ {str(e)}")
+        return render_template("index.html", forecast=forecast)
 
 
 if __name__ == "__main__":
