@@ -20,7 +20,7 @@ def download_micro_csv():
 
     print("📥 Downloading micro.csv from Google Drive...")
 
-    FILE_ID = "17eeKYcev5Bvw3QooTTLkP-i69hdkqZTo"   # <-- your Google Drive file ID
+    FILE_ID = "17eeKYcev5Bvw3QooTTLkP-i69hdkqZTo"
     URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
 
     try:
@@ -166,7 +166,20 @@ def predict():
         city = request.form["city"]
         date = request.form["date"]
         time = request.form["time"]
+
+        if not city:
+            return render_template("index.html", error="⚠️ Please select a city")
+
+        if not date or not time:
+            return render_template("index.html", error="⚠️ Please select date & time")
+
         input_datetime = pd.to_datetime(date + " " + time)
+
+        # =========================
+        # DATE RESTRICTION (2021–2024)
+        # =========================
+        if input_datetime.year < 2021 or input_datetime.year > 2024:
+            return render_template("index.html", error="⚠️ Only 2021–2024 supported")
 
         print(f"\n🔍 PREDICTING {city} at {input_datetime}")
 
@@ -283,7 +296,7 @@ def predict():
                 "wind": wind
             })
 
-        return render_template("index.html", forecast=forecast)
+        return render_template("index.html", forecast=forecast, error=f"⚠️ {str(e)}")
 
 
 if __name__ == "__main__":
