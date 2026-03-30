@@ -35,6 +35,12 @@
             <button type="submit" class="predict-btn">🔮 Predict Weather</button>
         </form>
 
+        {% if error %}
+        <div class="warning-box">
+            {{ error }}
+        </div>
+        {% endif %}
+
         {% if forecast %}
         <section class="forecast-section">
             <h2 class="forecast-title">5-Hour Forecast</h2>
