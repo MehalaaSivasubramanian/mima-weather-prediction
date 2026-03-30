@@ -1,3 +1,52 @@
+from flask import Flask, render_template, request, jsonify
+import pandas as pd
+import numpy as np
+import joblib
+from datetime import timedelta
+
+app = Flask(__name__)   # ✅ THIS MUST COME BEFORE @app.route
+
+# -------------------------
+# Load models / helpers here
+# -------------------------
+
+# Example placeholders
+mima_model = None
+macro_scaler = None
+
+def load_data():
+    micro_df = pd.read_csv("Combined_micro.csv")
+    macro_df = pd.read_csv("combined_macro.csv")
+
+    micro_df["Datetime"] = pd.to_datetime(micro_df["Datetime"])
+    macro_df["Datetime"] = pd.to_datetime(macro_df["Datetime"])
+
+    return micro_df, macro_df
+
+def fallback_weather(city):
+    return np.array([
+        [30, 70, 10],
+        [31, 68, 11],
+        [29, 72, 9],
+        [28, 75, 8],
+        [27, 78, 7]
+    ])
+
+def fix_values(temp, hum, wind, city):
+    temp = round(float(temp), 1)
+    hum = round(float(hum), 1)
+    wind = round(float(wind), 1)
+    return temp, hum, wind
+
+# -------------------------
+# Routes
+# -------------------------
+
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
@@ -14,13 +63,12 @@ def predict():
         input_year = input_datetime.year
         
         if input_year not in [2021, 2022, 2023]:
-            warning = f"❌ ERROR: Dataset only has data for **2021-2023** only! Year **{input_year}** is NOT supported."
+            warning = f"❌ ERROR: Dataset only has data for 2021-2023 only! Year {input_year} is NOT supported."
             print(f"🚫 BLOCKED YEAR {input_year}")
             return render_template("index.html", warning=warning)
         
         print(f"✅ VALID YEAR {input_year} - Processing...")
         
-        # [ALL EXISTING PREDICTION LOGIC - SAME AS BEFORE]
         micro_df, macro_df = load_data()
         
         city_micro = micro_df[micro_df["City"] == city].sort_values("Datetime")
@@ -108,5 +156,9 @@ def predict():
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
-        warning = "⚠️ Prediction failed. Please check your input and try again."
+        warning = f"⚠️ Prediction failed: {str(e)}"
         return render_template("index.html", warning=warning)
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
