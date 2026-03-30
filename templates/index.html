@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>🌤️ MiMa Weather Prediction System</title>
+    <title>🌤️ MiMa Weather</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -12,7 +12,7 @@
 
         <form method="POST" action="/predict" class="weather-form">
             <div class="form-group">
-                <label>🌆 Select City</label>
+                <label>🌆 City</label>
                 <select name="city" required>
                     <option value="Chennai">Chennai</option>
                     <option value="Madurai">Madurai</option>
@@ -32,13 +32,7 @@
                 <input type="time" name="time" required>
             </div>
             
-            {% if warning %}
-            <div class="warning-box">
-                {{ warning }}
-            </div>
-            {% endif %}
-            
-            <button type="submit" class="predict-btn">🔮 Predict</button>
+            <button type="submit" class="predict-btn">🔮 Predict Weather</button>
         </form>
 
         {% if forecast %}
