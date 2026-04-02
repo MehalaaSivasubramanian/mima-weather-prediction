@@ -21,6 +21,17 @@ city_file_map = {
 }
 
 # =========================
+# CITY COORDINATES FOR MAP
+# =========================
+city_coords = {
+    "Chennai": [13.0827, 80.2707],
+    "Madurai": [9.9252, 78.1198],
+    "Kumbakonam": [10.9601, 79.3845],
+    "Trichy": [10.7905, 78.7047],
+    "Coimbatore": [11.0168, 76.9558]
+}
+
+# =========================
 # DOWNLOAD micro.csv FROM GOOGLE DRIVE
 # =========================
 def download_micro_csv():
@@ -72,7 +83,6 @@ def load_data():
         if os.path.exists("micro.csv"):
             MICRO_DF = pd.read_csv("micro.csv")
 
-            # safer datetime handling
             if all(col in MICRO_DF.columns for col in ["Year", "Month", "Day", "Hour", "Minute"]):
                 MICRO_DF["Datetime"] = pd.to_datetime(
                     MICRO_DF[["Year", "Month", "Day", "Hour", "Minute"]]
@@ -174,7 +184,16 @@ def fallback_weather(city):
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        forecast=None,
+        chart_times=[],
+        chart_temp=[],
+        chart_hum=[],
+        chart_wind=[],
+        selected_city=None,
+        map_coords=[11.1271, 78.6569]  # Tamil Nadu default
+    )
 
 
 @app.route("/predict", methods=["POST"])
@@ -260,7 +279,25 @@ def predict():
                 "wind": wind
             })
 
-        return render_template("index.html", forecast=forecast)
+        # =========================
+        # CHART + MAP DATA
+        # =========================
+        chart_times = [pd.to_datetime(f["time"]).strftime("%H:%M") for f in forecast]
+        chart_temp = [f["temp"] for f in forecast]
+        chart_hum = [f["hum"] for f in forecast]
+        chart_wind = [f["wind"] for f in forecast]
+        map_coords = city_coords.get(city, [11.1271, 78.6569])
+
+        return render_template(
+            "index.html",
+            forecast=forecast,
+            chart_times=chart_times,
+            chart_temp=chart_temp,
+            chart_hum=chart_hum,
+            chart_wind=chart_wind,
+            selected_city=city,
+            map_coords=map_coords
+        )
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
@@ -282,7 +319,22 @@ def predict():
                 "wind": wind
             })
 
-        return render_template("index.html", forecast=forecast)
+        chart_times = [pd.to_datetime(f["time"]).strftime("%H:%M") for f in forecast]
+        chart_temp = [f["temp"] for f in forecast]
+        chart_hum = [f["hum"] for f in forecast]
+        chart_wind = [f["wind"] for f in forecast]
+        map_coords = city_coords.get(city if 'city' in locals() else "Coimbatore", [11.1271, 78.6569])
+
+        return render_template(
+            "index.html",
+            forecast=forecast,
+            chart_times=chart_times,
+            chart_temp=chart_temp,
+            chart_hum=chart_hum,
+            chart_wind=chart_wind,
+            selected_city=city if 'city' in locals() else "Coimbatore",
+            map_coords=map_coords
+        )
 
 
 if __name__ == "__main__":
