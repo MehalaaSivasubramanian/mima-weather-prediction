@@ -3,17 +3,32 @@
 <head>
     <title>🌤️ MiMa Weather</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Leaflet Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 </head>
 <body>
     <div class="container">
-        <h1>🌤️ MiMa Weather Prediction System</h1>
+        <div class="top-bar">
+            <h1>🌤️ MiMa Weather Prediction System</h1>
+            <button type="button" id="darkToggle" class="dark-btn">🌙 Dark Mode</button>
+        </div>
 
         <form method="POST" action="/predict" class="weather-form">
             <div class="form-group">
                 <label>🌆 City</label>
                 <select name="city" required>
+                    <option value="">Select City</option>
                     <option value="Chennai">Chennai</option>
                     <option value="Madurai">Madurai</option>
                     <option value="Kumbakonam">Kumbakonam</option>
@@ -43,28 +58,170 @@
 
         {% if forecast %}
         <section class="forecast-section">
-            <h2 class="forecast-title">5-Hour Forecast</h2>
+            <h2 class="forecast-title">⏱ 5-Hour Forecast</h2>
             <div class="forecast-grid">
                 {% for f in forecast %}
                 <div class="weather-card">
                     <div class="time">{{ f.time }}</div>
+
                     <div class="metric temp">
-                        <span class="label">Temperature</span>
-                        <span class="value">{{ f.temp }}</span><span class="unit">°C</span>
+                        <span class="label">🌡 Temperature</span>
+                        <span>
+                            <span class="value">{{ f.temp }}</span><span class="unit">°C</span>
+                        </span>
                     </div>
+
                     <div class="metric hum">
-                        <span class="label">Humidity</span>
-                        <span class="value">{{ f.hum }}</span><span class="unit">%</span>
+                        <span class="label">💧 Humidity</span>
+                        <span>
+                            <span class="value">{{ f.hum }}</span><span class="unit">%</span>
+                        </span>
                     </div>
+
                     <div class="metric wind">
-                        <span class="label">Wind Speed</span>
-                        <span class="value">{{ f.wind }}</span><span class="unit">km/h</span>
+                        <span class="label">💨 Wind Speed</span>
+                        <span>
+                            <span class="value">{{ f.wind }}</span><span class="unit">km/h</span>
+                        </span>
                     </div>
                 </div>
                 {% endfor %}
             </div>
         </section>
+
+        <!-- CHARTS -->
+        <section class="charts-section">
+            <h2 class="section-title">📊 Weather Trends</h2>
+
+            <div class="chart-card">
+                <h3>🌡 Temperature</h3>
+                <canvas id="tempChart"></canvas>
+            </div>
+
+            <div class="chart-card">
+                <h3>💧 Humidity</h3>
+                <canvas id="humChart"></canvas>
+            </div>
+
+            <div class="chart-card">
+                <h3>💨 Wind Speed</h3>
+                <canvas id="windChart"></canvas>
+            </div>
+        </section>
+
+        <!-- MAP -->
+        <section class="map-section">
+            <h2 class="section-title">📍 Location Map</h2>
+            <div class="map-card">
+                <h3>{{ selected_city }}</h3>
+                <div id="map"></div>
+            </div>
+        </section>
         {% endif %}
     </div>
+
+    <script>
+        // =========================
+        // DARK MODE
+        // =========================
+        const toggleBtn = document.getElementById("darkToggle");
+
+        if (localStorage.getItem("theme") === "dark") {
+            document.body.classList.add("manual-dark");
+        }
+
+        toggleBtn.addEventListener("click", () => {
+            document.body.classList.toggle("manual-dark");
+
+            if (document.body.classList.contains("manual-dark")) {
+                localStorage.setItem("theme", "dark");
+            } else {
+                localStorage.setItem("theme", "light");
+            }
+        });
+
+        // =========================
+        // CHARTS
+        // =========================
+        {% if forecast %}
+        const times = {{ chart_times | tojson }};
+        const temps = {{ chart_temp | tojson }};
+        const hums = {{ chart_hum | tojson }};
+        const winds = {{ chart_wind | tojson }};
+
+        new Chart(document.getElementById("tempChart"), {
+            type: "line",
+            data: {
+                labels: times,
+                datasets: [{
+                    label: "Temperature (°C)",
+                    data: temps,
+                    tension: 0.35,
+                    fill: true,
+                    borderWidth: 3,
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        new Chart(document.getElementById("humChart"), {
+            type: "line",
+            data: {
+                labels: times,
+                datasets: [{
+                    label: "Humidity (%)",
+                    data: hums,
+                    tension: 0.35,
+                    fill: true,
+                    borderWidth: 3,
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        new Chart(document.getElementById("windChart"), {
+            type: "line",
+            data: {
+                labels: times,
+                datasets: [{
+                    label: "Wind Speed (km/h)",
+                    data: winds,
+                    tension: 0.35,
+                    fill: true,
+                    borderWidth: 3,
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        // =========================
+        // MAP
+        // =========================
+        const coords = {{ map_coords | tojson }};
+        const cityName = {{ selected_city | tojson }};
+
+        const map = L.map('map').setView(coords, 10);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        L.marker(coords).addTo(map)
+            .bindPopup(`📍 ${cityName}`)
+            .openPopup();
+        {% endif %}
+    </script>
 </body>
 </html>
